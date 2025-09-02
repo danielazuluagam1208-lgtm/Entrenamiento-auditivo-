@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Explorador Musical — Patico</title>
+<style>
+  :root{
+    --sky:#7ec8ff;
+    --cloud:#fff;
+    --grass:#3fb24a;
+    --soil:#2f7a30;
+    --panel-bg: rgba(0,0,0,0.45);
+    --accent:#ffd27a;
+    --danger:#ef4444;
+    --overlay-bg: rgba(2,6,23,0.85);
+    --pixel-border: #111827;
+  }
+  html,body{height:100%;margin:0;font-family: "Courier New", Courier, monospace; background:linear-gradient(#cfeeff,#b8e4ff);}
+  .container{display:flex;flex-direction:column;align-items:center;gap:12px;padding:12px;}
+  h1{margin:8px 0;color:#063a6a;}
+  .game-area{width:92vw; max-width:1100px; height:520px; position:relative; border-radius:6px; overflow:hidden; box-shadow:0 10px 30px rgba(2,6,23,0.4); background:linear-gradient(#7ec8ff 0%, #66bfff 60%);}
+  #world{position:absolute; left:0; top:0; height:100%; width:4000px; will-change:transform;}
+  .sky{position:absolute; left:0; top:0; height:65%; width:100%; overflow:hidden;}
+  .cloud{position:absolute; background:var(--cloud); border-radius:50px; opacity:0.95; filter:blur(0.2px); box-shadow:30px 10px 0 rgba(255,255,255,0.95); }
+  .ground-layer{position:absolute; left:0; right:0; bottom:0; height:35%; display:block;}
+  .grass{position:absolute; left:0; right:0; bottom:0; height:58%; background: linear-gradient(180deg,var(--grass), #2f9a3e);}
+  .soil{position:absolute; left:0; right:0; bottom:0; height:42%; background: linear-gradient(180deg,#2f7a30,#1f5a24);}
+  .web { position:absolute; width:96px; height:96px; bottom: calc(35% + 20px); margin-bottom: 8px; display:flex; align-items:center; justify-content:center; pointer-events:auto; z-index:60; }
+  .web .web-img { width:96px;height:96px; background-size:contain; filter: drop-shadow(0 6px 6px rgba(0,0,0,0.2)); }
+  .web.locked { opacity:1; } .web.cleared { opacity:0.18; transform:scale(0.88); transition:all .6s ease; pointer-events:none; filter:grayscale(1); }
+  .web .label { position:absolute; top:-20px; left:50%; transform:translateX(-50%); background:var(--panel-bg); color:#fff; padding:4px 8px; border-radius:6px; font-size:12px; backdrop-filter: blur(4px); }
+  #player{ position:absolute; bottom: calc(35% + 8px); left:80px; width:64px; height:96px; z-index:70; transform-origin:center bottom; pointer-events:none; }
+  .sprite { width:64px; height:96px; background-size:128px 96px; background-repeat:no-repeat; image-rendering:pixelated; filter: drop-shadow(0 8px 8px rgba(0,0,0,0.4)); }
+  .sprite.frame2{ background-position:-64px 0; }
+  .facing-left{ transform: scaleX(-1); }
+  .hud{ position:absolute; top:12px; left:12px; z-index:120; background:var(--panel-bg); color:#fff; padding:8px 10px; border-radius:8px; font-size:14px; display:flex; gap:8px; align-items:center; }
+  .hud .stat{ font-weight:700; margin-left:6px; color:var(--accent);}
+  .controls { position:absolute; bottom:12px; left:12px; z-index:120; display:flex; gap:8px;}
+  .control-btn{ width:56px; height:44px; border-radius:8px; border:0; background:rgba(255,255,255,0.08); color:#033; font-weight:700; font-size:18px; cursor:pointer; }
+  .modal { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); min-width:320px; max-width:640px; background: linear-gradient(180deg, rgba(255,255,255,0.98), #f6f9ff); border-radius:6px; padding:12px; box-shadow:0 20px 40px rgba(2,6,23,0.5); z-index:200; color:#072; display:none; font-family: "Courier New", Courier, monospace; }
+  .modal.show{ display:block; }
+  .modal h2{ margin:4px 0 8px 0; color:#064; font-weight:700; letter-spacing:1px; }
+  .choices{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .choice-btn{ padding:10px; border-radius:4px; border:2px solid #111; background:#fff; cursor:pointer; font-weight:700; box-shadow: 3px 3px 0 #000; }
+  .btn-secondary{ background:transparent; border:2px solid #111; padding:8px 10px; border-radius:4px; cursor:pointer; font-weight:700; box-shadow: 3px 3px 0 #000; }
+  .avatar-overlay{ display:none !important; }
+  .gameover-overlay, .victory-overlay{ position:absolute; left:0; top:0; right:0; bottom:0; display:none; align-items:center; justify-content:center; z-index:300; background: var(--overlay-bg); color: #fff; font-family: "Courier New", Courier, monospace; }
+  .gameover-card{ width:min(520px,95%); background: linear-gradient(180deg,#111827,#0b1220); border-radius:6px; padding:10px; text-align:center; box-shadow: 0 12px 30px rgba(0,0,0,0.7); border: 6px solid var(--pixel-border); }
+  .gameover-card .pixel-title{ font-size:28px; color:#ffd27a; margin:6px 0; letter-spacing:2px; }
+  .go-stat{ background:#071229; padding:6px 10px; border:3px solid #111; box-shadow:3px 3px 0 #000; border-radius:4px; min-width:86px; }
+  .gameover-actions{ display:flex; gap:8px; justify-content:center; margin-top:12px; }
+  .btn-primary{ background: linear-gradient(180deg,#10b981,#059669); color:#fff; border:3px solid #053a2b; padding:10px 14px; border-radius:4px; font-weight:900; cursor:pointer; box-shadow: 4px 4px 0 #000; }
+  .btn-muted{ background: linear-gradient(180deg,#1b1f2a,#0f1724); border:3px solid #111; color:#e2e8f0; padding:10px 14px; border-radius:4px; cursor:pointer; box-shadow: 4px 4px 0 #000; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Explorador Musical — Patico</h1>
+    <div class="game-area" id="gameArea" aria-label="Área de juego">
+      <div id="world" role="application" aria-label="Mundo">
+        <div class="sky" aria-hidden="true">
+          <div class="cloud" style="left:80px; top:26px; width:180px; height:56px;"></div>
+          <div class="cloud" style="left:520px; top:40px; width:220px; height:70px; opacity:0.9;"></div>
+          <div class="cloud" style="left:920px; top:18px; width:140px; height:48px;"></div>
+          <div class="cloud" style="left:1460px; top:34px; width:200px; height:64px;"></div>
+          <div class="cloud" style="left:2300px; top:12px; width:240px; height:82px;"></div>
+        </div>
+        <div class="ground-layer" aria-hidden="true">
+          <div class="grass"></div>
+          <div class="soil"></div>
+        </div>
+        <div id="webContainer"></div>
+        <div id="player" aria-label="Personaje jugador">
+          <div class="sprite" id="sprite"></div>
+        </div>
+      </div>
+      <div class="hud" id="hud">
+        Nivel: <span class="stat" id="statLevel">1</span>
+        &nbsp; Progreso: <span class="stat" id="statProg">0/8</span>
+        &nbsp; Vidas: <span class="stat" id="statLives">3</span>
+      </div>
+      <div class="controls" aria-hidden="false">
+        <button class="control-btn" id="btnLeft">◀</button>
+        <button class="control-btn" id="btnStop">■</button>
+        <button class="control-btn" id="btnRight">▶</button>
+      </div>
+      <div class="modal" id="questionModal" role="dialog" aria-modal="true" aria-hidden="true">
+        <h2 id="modalTitle">¿Qué escuchas?</h2>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button id="playSound" class="btn-secondary">🔊 Reproducir</button>
+          <div id="modalHint" style="margin-left:8px;color:#666;font-size:13px;">Pulsa reproducir para escuchar.</div>
+        </div>
+        <div class="choices" id="choices"></div>
+        <div class="feedback" id="modalFeedback"></div>
+        <div class="controls" style="margin-top:8px;">
+          <button class="btn-secondary" id="skipQuestion">Saltar (-1 vida)</button>
+          <button class="btn-secondary" id="closeModal" style="display:none;">Cerrar</button>
+        </div>
+      </div>
+      <div class="gameover-overlay" id="gameOverOverlay" role="dialog" aria-hidden="true">
+        <div class="gameover-card">
+          <div class="pixel-title">GAME OVER</div>
+          <p id="gameOverText">Has quedado sin vidas.</p>
+          <div class="gameover-stats">
+            <div class="go-stat">
+              <small>Nivel</small>
+              <strong id="goLevel">1</strong>
+            </div>
+            <div class="go-stat">
+              <small>Progreso</small>
+              <strong id="goProgress">0/8</strong>
+            </div>
+          </div>
+          <div class="gameover-actions">
+            <button class="btn-primary" id="btnRetryLevel">REINTENTAR</button>
+            <button class="btn-muted" id="btnMainMenu">MENÚ</button>
+          </div>
+          <div style="margin-top:10px;color:#9ca3af;font-size:12px;">Pulsa REINTENTAR para volver a intentarlo en el mismo nivel.</div>
+        </div>
+      </div>
+      <div class="victory-overlay" id="victoryOverlay" role="dialog" aria-hidden="true">
+        <div class="victory-card">
+          <h2>¡FELICIDADES!</h2>
+          <p id="victoryText">Has completado todos los niveles disponibles.</p>
+          <div class="gameover-actions" style="margin-top:12px;">
+            <button class="btn-primary" id="btnRestartAll">REINICIAR</button>
+            <button class="btn-muted" id="btnCloseVictory">CERRAR</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+<script>
+(function(){
+  const OBSTACLES_PER_LEVEL = 8;
+  const MAX_LEVELS = 10;
+  const WORLD_WIDTH = 4000;
+  const PLAYER_BASE_X = 80;
+  function livesForLevel(lvl){ return lvl <= 5 ? 4 : 3; }
+  const intervalOptionsByLevel = {
+    1: [{ name:"Segunda mayor", semitones:2 },{ name:"Tercera menor", semitones:3 },{ name:"Tercera mayor", semitones:4 },{ name:"Quinta justa", semitones:7 },{ name:"Octava", semitones:12 }],
+    2: [{ name:"Segunda menor", semitones:1 },{ name:"Segunda mayor", semitones:2 },{ name:"Tercera menor", semitones:3 },{ name:"Tercera mayor", semitones:4 },{ name:"Cuarta justa", semitones:5 },{ name:"Quinta justa", semitones:7 },{ name:"Sexta mayor", semitones:9 },{ name:"Octava", semitones:12 }],
+    3: [{ name:"Segunda menor", semitones:1 },{ name:"Segunda mayor", semitones:2 },{ name:"Tercera menor", semitones:3 },{ name:"Tercera mayor", semitones:4 },{ name:"Cuarta justa", semitones:5 },{ name:"Trítono", semitones:6 },{ name:"Quinta justa", semitones:7 },{ name:"Sexta menor", semitones:8 },{ name:"Sexta mayor", semitones:9 },{ name:"Séptima menor", semitones:10 },{ name:"Octava", semitones:12 }]
+  };
+  const chordOptionsByLevel = {
+    1: [{ name:"Acorde mayor", structure:[0,4,7] },{ name:"Acorde menor", structure:[0,3,7] },{ name:"Acorde disminuido", structure:[0,3,6] }],
+    2: [{ name:"Acorde mayor", structure:[0,4,7] },{ name:"Acorde menor", structure:[0,3,7] },{ name:"Acorde disminuido", structure:[0,3,6] },{ name:"Acorde aumentado", structure:[0,4,8] }],
+    3: [{ name:"Acorde mayor", structure:[0,4,7] },{ name:"Acorde menor", structure:[0,3,7] },{ name:"Acorde disminuido", structure:[0,3,6] },{ name:"Acorde aumentado", structure:[0,4,8] }]
+  };
+  const baseMidis = [60,62,64,65,67,69];
+  // Patico SVG sprite (2 frames, base64)
+  const duckSvg = `
+<svg xmlns='http://www.w3.org/2000/svg' width='32' height='24' viewBox='0 0 32 24'>
+  <rect x='0' y='0' width='16' height='24' fill='none'/>
+  <ellipse cx='8' cy='13' rx='6' ry='5' fill='#ffde59' stroke='#e6c84a' stroke-width='0.6'/>
+  <path d='M5 12 q4 2 6 0' fill='none' stroke='#f3c94a' stroke-width='0.8'/>
+  <circle cx='10' cy='8' r='3' fill='#ffde59' stroke='#e6c84a' stroke-width='0.6'/>
+  <circle cx='9.6' cy='7.6' r='0.6' fill='#000'/>
+  <path d='M12 8.5 l2 0.6 l-2 0.2 z' fill='#ffb84d' stroke='#e69539' stroke-width='0.4'/>
+  <path d='M6 10 l1 -1' stroke='#f6d36a' stroke-width='0.5'/>
+  <rect x='6' y='17' width='3' height='2' fill='#ffb84d'/>
+  <rect x='11' y='17' width='3' height='2' fill='#ffb84d'/>
+  <rect x='16' y='0' width='16' height='24' fill='none'/>
+  <ellipse cx='24' cy='13' rx='6' ry='5' fill='#ffde59' stroke='#e6c84a' stroke-width='0.6'/>
+  <path d='M21 12 q4 2 6 0' fill='none' stroke='#f3c94a' stroke-width='0.8'/>
+  <circle cx='26' cy='8' r='3' fill='#ffde59' stroke='#e6c84a' stroke-width='0.6'/>
+  <circle cx='25.6' cy='7.6' r='0.6' fill='#000'/>
+  <path d='M28 8.5 l2 0.6 l-2 0.2 z' fill='#ffb84d' stroke='#e69539' stroke-width='0.4'/>
+  <path d='M22 10 l1 -1' stroke='#f6d36a' stroke-width='0.5'/>
+  <rect x='22' y='17' width='3' height='2' fill='#ffb84d'/>
+  <rect x='27' y='17' width='3' height='2' fill='#ffb84d'/>
+</svg>`;
+  function svgToDataUriBase64(svg){
+    return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+  }
+  const duckDataUri = svgToDataUriBase64(duckSvg);
+  const webSvg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'>
+<g fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' opacity='0.95'>
+<circle cx='48' cy='48' r='34'/>
+<circle cx='48' cy='48' r='22'/>
+<circle cx='48' cy='48' r='10'/>
+<path d='M48 14 L48 82 M14 48 L82 48 M25 25 L71 71 M71 25 L25 71'/>
+</g></svg>`;
+  const webDataUri = svgToDataUriBase64(webSvg);
+
+  let level = 1, lives = livesForLevel(1), progress = 0, obstacles = [], currentObstacle = null, audioContext = null, acceptingAnswers = false;
+  let playerState = { x: PLAYER_BASE_X, vx:0, accel:2200, maxSpeed:320, friction:2000, dir:0, facing:1 };
+  const sprite = document.getElementById('sprite');
+  sprite.style.backgroundImage = `url("${duckDataUri}")`;
+  const webContainer = document.getElementById('webContainer');
+  const hudLevel = document.getElementById('statLevel');
+  const hudProg = document.getElementById('statProg');
+  const hudLives = document.getElementById('statLives');
+  const btnLeft = document.getElementById('btnLeft');
+  const btnRight = document.getElementById('btnRight');
+  const btnStop = document.getElementById('btnStop');
+  const modal = document.getElementById('questionModal');
+  const playSoundBtn = document.getElementById('playSound');
+  const choicesEl = document.getElementById('choices');
+  const modalFeedback = document.getElementById('modalFeedback');
+  const skipBtn = document.getElementById('skipQuestion');
+
+  const gameOverOverlay = document.getElementById('gameOverOverlay');
+  const goLevel = document.getElementById('goLevel');
+  const goProgress = document.getElementById('goProgress');
+  const btnRetryLevel = document.getElementById('btnRetryLevel');
+  const btnMainMenu = document.getElementById('btnMainMenu');
+  const victoryOverlay = document.getElementById('victoryOverlay');
+  const btnRestartAll = document.getElementById('btnRestartAll');
+  const btnCloseVictory = document.getElementById('btnCloseVictory');
+
+  function initAudio(){ if(!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)(); }
+  function midiToFreq(m){ return 440 * Math.pow(2, (m - 69) / 12); }
+  function createPianoNote(baseMidi, when, duration=1.2, peakGain=0.18){
+    initAudio();
+    const ctx = audioContext;
+    const now = when;
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.0001, now);
+    master.connect(ctx.destination);
+    master.gain.exponentialRampToValueAtTime(peakGain, now + 0.01);
+    master.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    const freq = midiToFreq(baseMidi);
+    const partials = [{mul:1,amp:1,detune:0},{mul:2,amp:0.45,detune:2},{mul:3,amp:0.18,detune:-3}];
+    partials.forEach(p=>{
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type='sine';
+      osc.frequency.value = freq * p.mul;
+      osc.detune.value = p.detune;
+      g.gain.setValueAtTime(p.amp * 0.8, now);
+      osc.connect(g); g.connect(master);
+      osc.start(now + 0.001); osc.stop(now + duration + 0.05);
+    });
+    const noiseBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.05), ctx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for(let i=0;i<data.length;i++) data[i] = (Math.random()*2 - 1) * Math.exp(-i/(ctx.sampleRate * 0.02));
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.9 * peakGain, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+    const noiseFilter = ctx.createBiquadFilter(); noiseFilter.type='lowpass'; noiseFilter.frequency.value=4200;
+    noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(master);
+    noise.start(now); noise.stop(now + 0.06);
+    return { master };
+  }
+  function playPianoInterval(baseMidi, semitones, separation=0.6, duration=1.2, peakGain=0.18){
+    initAudio();
+    const now = audioContext.currentTime + 0.02;
+    createPianoNote(baseMidi, now, duration, peakGain);
+    createPianoNote(baseMidi + semitones, now + separation, duration, peakGain);
+  }
+  function playPianoChord(baseMidi, structure, duration=1.2, peakGain=0.
